@@ -20,7 +20,7 @@ func (e *Expect) Check(res *requestResult, ex *ExpectConfig) error {
 	}
 
 	status := ex.Status
-	if status == 0 {
+	if status == 0 && res.Status != 0 {
 		status = 200
 	}
 
@@ -34,14 +34,24 @@ func (e *Expect) Check(res *requestResult, ex *ExpectConfig) error {
 	// log.Printf("request body: %s", string(res.RawBody))
 	// log.Printf("expect  body: %s", ex.Body)
 
+	var body string
+
 	if ex.Body != "" {
-		err := ex.Comparator.CmpBody(res.RawBody, []byte(ex.Body))
+		body = ex.Body
+	} else if ex.BodyMin != "" {
+		ex.Comparator.IsLeast = true
+		body = ex.BodyMin
+	}
+
+	if len(body) > 0 {
+		err := ex.Comparator.CmpBody(res.RawBody, []byte(body))
 		if err != nil {
 			LogPrintfH2("Error on compare request body")
 			log.Printf("Raw request body: %s", string(res.RawBody))
-			log.Printf("Raw expect  body: %s", ex.Body)
+			log.Printf("Raw expect  body: %s", body)
 			return err
 		}
 	}
+
 	return nil
 }

@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"microtest/vars"
 	"path"
 	"time"
 
@@ -31,13 +32,25 @@ type Microtest struct {
 func (m *Microtest) Start(ctx context.Context, dc *docker.Client) (err error) {
 	conf := m.Conf
 
-	log.Printf("Start mocks")
+	LogPrintfH2("Init test: %s", conf.Name)
+
+	if isDebug {
+		log.Printf("Start mocks")
+	}
 	m.mocks = NewMocks(conf.Mocks)
+	m.mocks.ResetMocks(nil)
 	err = m.mocks.Run()
 	if err != nil {
 		log.Printf("Error on run mocks")
 		return err
 	}
+
+	defer func() {
+		err := m.mocks.Stop()
+		if err != nil {
+			log.Printf("Error on stop mocks: %v", err)
+		}
+	}()
 
 	var services []*Service
 	var extraHosts []string
@@ -63,9 +76,11 @@ func (m *Microtest) Start(ctx context.Context, dc *docker.Client) (err error) {
 		}
 	}()
 
-	log.Printf("Start services")
+	if isDebug && len(m.Conf.Services) > 0 {
+		log.Printf("Start services:")
+	}
 	for _, sc := range m.Conf.Services {
-		srv := NewService(sc)
+		srv := NewService(&sc)
 		ip, err := srv.Start(dc)
 		if err != nil {
 			log.Printf("Error on start %q service: %v", srv.Name, err)
@@ -75,8 +90,8 @@ func (m *Microtest) Start(ctx context.Context, dc *docker.Client) (err error) {
 		extraHosts = append(extraHosts, fmt.Sprintf("%s: %s", srv.Name, ip))
 	}
 
-	log.Printf("Sleep 10 sec")
-	time.Sleep(10 * time.Second)
+	// log.Printf("Sleep 10 sec")
+	// time.Sleep(10 * time.Second)
 
 	LogPrintfH1("Start tests: %s", conf.Name)
 
@@ -106,16 +121,16 @@ func (m *Microtest) Start(ctx context.Context, dc *docker.Client) (err error) {
 }
 
 func (m *Microtest) startTests(conf *Config) error {
-	err := m.testedService.PingRequest(conf.PingRequest)
+	err := m.testedService.PingRequest(&conf.PingRequest)
 	if err != nil {
 		log.Printf("Error on ping request: %v", err)
 		return err
 	}
 
-	for _, t := range conf.Tests {
-		m.mocks.ResetMocks()
+	variables := vars.Map{}
 
-		err = m.test(t)
+	for _, t := range conf.Tests {
+		err = m.test(&t, variables)
 		if err != nil {
 			LogPrintfH1("Error on test (%s): %v", t.Name, err)
 			return err
@@ -128,12 +143,14 @@ func (m *Microtest) startTests(conf *Config) error {
 	return nil
 }
 
-func (m *Microtest) test(t *TestConfig) error {
+func (m *Microtest) test(t *TestConfig, vs vars.Map) error {
 	if isDebug {
 		LogPrintfH2("Start test: %s", t.Name)
 	} else {
 		log.Printf("Start test: %s", t.Name)
 	}
+
+	m.mocks.ResetMocks(t.Mocks)
 
 	if t.Sleep > 0 {
 		if isDebug {
@@ -142,9 +159,10 @@ func (m *Microtest) test(t *TestConfig) error {
 		time.Sleep(time.Duration(t.Sleep) * time.Second)
 	}
 
-	m.mocks.UpdateConfigs(t.Mocks)
+	t.Request.OverrideByVariables(vs)
+	t.Expect.ExpectConfig.SetVars(vs)
 
-	err := m.testedService.Request(t.Request, &t.Expect.ExpectConfig)
+	err := m.testedService.Request(&t.Request, &t.Expect.ExpectConfig)
 	if err != nil {
 		return err
 	}

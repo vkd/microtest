@@ -162,16 +162,39 @@ func (t *TestedService) PingRequest(r *PingRequestConfig) error {
 	}
 
 	if r.Count == 0 {
-		r.Count = 10
+		r.Count = 3
 	}
+
+	if r.URL == "" {
+		r.URL = "/ping"
+	}
+
+	var sleepSkipFirst func(time.Duration)
+	sleepSkipFirst = func(time.Duration) { sleepSkipFirst = time.Sleep }
 
 	var err error
 	for i := 0; i < r.Count; i++ {
-		err = t.Request(&r.RequestConfig, &ExpectConfig{Status: 200})
+		sleepSkipFirst(time.Second)
+
+		res, err := sendRequest(t.ip, t.port, &r.RequestConfig)
+		if err != nil {
+			if isDebug {
+				log.Printf("Error on send ping request to (%s:%d): %v", t.ip, t.port, err)
+			}
+			continue
+		}
+
+		err = NewExpect().Check(res, &ExpectConfig{Status: 200})
+		if err != nil {
+			if isDebug {
+				log.Printf("Error on check ping request expect: %v", err)
+			}
+			continue
+		}
+
 		if err == nil {
 			return nil
 		}
-		time.Sleep(time.Second)
 	}
 	return err
 }

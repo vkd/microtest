@@ -47,21 +47,26 @@ func NewMocks(conf MockConfigs) *Mocks {
 
 		Port: DefaultMocksPort,
 	}
+	m.UpdateConfigs(conf)
 	return m
 }
 
-func (m *Mocks) ResetMocks() {
+func (m *Mocks) ResetMocks(conf MockConfigs) {
 	m.mx.Lock()
 	m.Mocks = map[string]*Mock{}
 	m.mx.Unlock()
 
 	m.UpdateConfigs(m.conf)
+	m.UpdateConfigs(conf)
 }
 
 func (m *Mocks) UpdateConfigs(conf MockConfigs) {
 	m.mx.Lock()
 
 	for mockName, c := range conf {
+		if isDebug {
+			log.Printf("Update mock (%s): %v", mockName, c)
+		}
 		if mm, ok := m.Mocks[mockName]; ok {
 			mm.conf = c
 		} else {
@@ -98,6 +103,9 @@ func (m *Mocks) Run() error {
 		}
 		err := m.srv.ListenAndServe()
 		if err != nil {
+			if err == http.ErrServerClosed {
+				return
+			}
 			log.Printf("Error on listen mocks: %v", err)
 		}
 	}()
@@ -111,14 +119,14 @@ func (m *Mocks) Stop() error {
 	return nil
 }
 
-func (m *Mocks) CheckExpect(exp map[string]*ExpectConfig) error {
+func (m *Mocks) CheckExpect(exp map[string]ExpectConfig) error {
 	for mockName, e := range exp {
 		mock := m.getMock(mockName)
 		if mock == nil {
 			return fmt.Errorf("mock not found: %q", mockName)
 		}
 
-		err := mock.CheckExpect(e)
+		err := mock.CheckExpect(&e)
 		if err != nil {
 			return err
 		}

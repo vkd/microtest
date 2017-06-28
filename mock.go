@@ -117,7 +117,7 @@ func (m *Mock) handle(method, url string, body io.ReadCloser) (status int, out [
 	m.mxRequests.Unlock()
 
 	if m.IsDebug {
-		log.Printf("Start find equal out")
+		log.Printf("Start find equal out for %q", m.host)
 		log.Printf("Count configs: %d", len(m.conf))
 		log.Printf("All configs: %v", m.conf)
 	}

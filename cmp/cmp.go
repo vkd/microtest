@@ -3,6 +3,8 @@ package cmp
 import (
 	"bytes"
 	"encoding/json"
+	"microtest/vars"
+	"strings"
 
 	"reflect"
 )
@@ -11,6 +13,16 @@ type Comparator struct {
 	IsRaw     bool `yaml:"is_raw"`
 	IsLeast   bool `yaml:"is_least"`
 	IsOrdered bool `yaml:"is_ordered"`
+
+	OverrideVars []string `yaml:"override"`
+
+	overrideMap map[string]struct{}
+
+	vars vars.Map
+}
+
+func (c *Comparator) SetVars(m vars.Map) {
+	c.vars = m
 }
 
 func (c *Comparator) CmpBody(r, ex []byte) error {
@@ -35,6 +47,21 @@ func (c *Comparator) CmpBody(r, ex []byte) error {
 }
 
 func (c *Comparator) Compare(result, expect interface{}) error {
+	if v, ok := expect.(string); ok && strings.HasPrefix(v, "$") {
+		if c.isOverride(v[1:]) {
+			c.vars.Add(v[1:], result)
+			return nil
+		}
+
+		if r, ok := result.(string); ok && r == v {
+			return nil
+		}
+
+		if variable, ok := c.vars[v[1:]]; ok {
+			expect = variable
+		}
+	}
+
 	if reflect.TypeOf(result) != reflect.TypeOf(expect) {
 		return NewErrDifferentTypes(result, expect)
 	}
@@ -57,6 +84,10 @@ func (c *Comparator) Compare(result, expect interface{}) error {
 		}
 	case float64:
 		if r != expect.(float64) {
+			return NewErrNotEqual(result, expect)
+		}
+	case nil:
+		if expect != nil {
 			return NewErrNotEqual(result, expect)
 		}
 	default:
@@ -154,4 +185,15 @@ func (c *Comparator) cmpSlice(result, expect []interface{}) error {
 	}
 
 	return nil
+}
+
+func (c *Comparator) isOverride(key string) bool {
+	if c.overrideMap == nil {
+		c.overrideMap = map[string]struct{}{}
+		for _, o := range c.OverrideVars {
+			c.overrideMap[o] = struct{}{}
+		}
+	}
+	_, ok := c.overrideMap[key]
+	return ok
 }

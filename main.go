@@ -155,6 +155,15 @@ func runContainer(ctx context.Context) error {
 		cmd = append(cmd, "--debug")
 	}
 
+	bindWorkDir := fmt.Sprintf("%s:%s:ro",
+		hostWorkdir,
+		ContainerMicrotestsPath,
+	)
+
+	if isDebug {
+		log.Printf("Bind workdir: %q", bindWorkDir)
+	}
+
 	microCont, err := dc.CreateContainer(docker.CreateContainerOptions{
 		Name: SelfDefaultContainerName,
 		Config: &docker.Config{
@@ -243,6 +252,10 @@ func runContainer(ctx context.Context) error {
 }
 
 func startMicrotests(ctx context.Context, selfContainer *docker.Container) error {
+	if isDebug {
+		log.Printf("Microtests path: %s", testPath)
+	}
+
 	info, err := os.Stat(testPath)
 	if err != nil {
 		return err
@@ -268,6 +281,11 @@ func startMicrotests(ctx context.Context, selfContainer *docker.Container) error
 		tests = append(tests, testPath)
 	}
 
+	if len(tests) == 0 {
+		log.Printf("Tests not found")
+		return nil
+	}
+
 	sort.Strings(tests)
 
 	if isDebug {
@@ -290,7 +308,7 @@ func startMicrotests(ctx context.Context, selfContainer *docker.Container) error
 func startMicrotest(ctx context.Context, dc *docker.Client, selfContainer *docker.Container, configPath string) error {
 	conf, err := ReadConfig(configPath)
 	if err != nil {
-		log.Printf("Error on read config: %v", err)
+		log.Printf("Error on read config (%s): %v", configPath, err)
 		return err
 	}
 
@@ -311,7 +329,7 @@ func absPathTests(p string) string {
 	if strings.HasPrefix(p, "./") {
 		return path.Join(os.Getenv("PWD"), p[2:])
 	}
-	return path.Join(os.Getenv("HOME"), p)
+	return path.Join(os.Getenv("PWD"), p)
 }
 
 // func runTests(conf *Config) {

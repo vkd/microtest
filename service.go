@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"log"
 	"strings"
+	"time"
 
 	"github.com/fsouza/go-dockerclient"
 )
@@ -54,6 +55,11 @@ func (s *Service) Start(dc *docker.Client) (ip string, err error) {
 	if err != nil {
 		log.Printf("Error on start %q service container: %v", s.Name, err)
 		return "", err
+	}
+
+	if s.conf.ReadyTimeoutSec > 0 {
+		log.Printf("Sleep on ready service (%s): %d", s.Name, s.conf.ReadyTimeoutSec)
+		time.Sleep(time.Duration(s.conf.ReadyTimeoutSec) * time.Second)
 	}
 
 	cnt, err = dc.InspectContainer(cnt.ID)
