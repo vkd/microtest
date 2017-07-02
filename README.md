@@ -1,4 +1,4 @@
-# Microtest - test tool for microservices
+# Microtest - tool for testing microservices
 
 Run tested image, send request and check expect response.
 
